@@ -6,7 +6,8 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
 from config import config
-from handlers import business, discussion
+import business
+import discussion
 
 logging.basicConfig(level=logging.INFO)
 
