@@ -5,12 +5,13 @@
 """
 from aiogram import Router, F, Bot
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import BusinessMessagesDeleted, Message
 
 from config import config
 import ai_state
 import delay_manager
 import firebase_db
+import message_archive
 import openrouter
 
 router = Router(name="business")
@@ -71,6 +72,7 @@ async def on_business_message(message: Message, bot: Bot):
         return
     if not await _is_allowed_connection(bot, message.business_connection_id):
         return  # чужой бизнес-аккаунт подключил этого же бота — игнорируем
+    message_archive.remember(message)
     if message.from_user and message.from_user.id == config.allowed_business_user_id:
         return
     if not ai_state.is_enabled(_chat_key(message)):
@@ -100,3 +102,34 @@ async def on_business_message(message: Message, bot: Bot):
     await delay_manager.schedule_reply(
         dialog_id, message.text, config.reply_delay_seconds, _on_fire
     )
+
+
+@router.business_message()
+async def on_business_media(message: Message, bot: Bot):
+    if not message.business_connection_id:
+        return
+    if not await _is_allowed_connection(bot, message.business_connection_id):
+        return
+    message_archive.remember(message)
+
+
+@router.edited_business_message()
+async def on_edited_business_message(message: Message, bot: Bot):
+    if not message.business_connection_id:
+        return
+    if not await _is_allowed_connection(bot, message.business_connection_id):
+        return
+    previous = message_archive.update(message)
+    await message_archive.notify_edited(
+        bot,
+        message,
+        previous,
+        config.allowed_business_user_id,
+    )
+
+
+@router.deleted_business_messages()
+async def on_deleted_business_messages(event: BusinessMessagesDeleted, bot: Bot):
+    if not await _is_allowed_connection(bot, event.business_connection_id):
+        return
+    await message_archive.notify_owner(bot, event, config.allowed_business_user_id)
